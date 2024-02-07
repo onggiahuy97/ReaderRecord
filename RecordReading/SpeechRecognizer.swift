@@ -35,7 +35,6 @@ class SpeechRecognizer {
             var isFinal = false
             
             if let result = result {
-                print(result.bestTranscription.formattedString)
                 completion(result.bestTranscription.formattedString)
                 isFinal = result.isFinal
             }
@@ -62,7 +61,7 @@ class SpeechRecognizer {
         print("Go ahead, I'm listening")
     }
     
-    func stopLestening() {
+    func stopListening() {
         audioEngine.stop() 
         recognitionRequest?.endAudio()
     }

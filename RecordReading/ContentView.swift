@@ -19,6 +19,17 @@ struct ContentView: View {
     @State private var isRecording = false
     @State private var cameraView = CameraView()
     @State private var isCameraOn = true
+    @State private var currentWords = [String]()
+    @State private var currentIndexWord = 0
+    @State private var isReadingFromText = false
+    
+    let speechRecignizer = SpeechRecognizer()
+    
+    var words: [String] {
+        text.components(separatedBy: .whitespacesAndNewlines).map { component in
+            component.unicodeScalars.filter { CharacterSet.alphanumerics.contains($0) }.string
+        }.filter { !$0.isEmpty }
+    }
     
     var textList: [(Int, String)] {
         Array(text.components(separatedBy: "\n").enumerated())
@@ -50,21 +61,43 @@ struct ContentView: View {
                     ScrollView {
                         Spacer()
                             .frame(height: 50)
-                        ForEach(textList, id: \.0) { index, line in
-                            Text(line)
-                                .id(index)
-                                .font(.title2)
-                                .fontDesign(.rounded)
-                                .bold()
-                                .foregroundStyle(currentIndex == index ? .white : .gray.opacity(0.75))
-                                .onTapGesture {
-                                    withAnimation(.spring) {
-                                        scrollProxy.scrollTo(index, anchor: .center)
-                                        currentIndex = index
+                        
+                        if isReadingFromText {
+                            
+                            let fullText = words.enumerated().reduce(Text("")) { (partialResult, current) in
+                                let (index, word) = current
+                                let wordText = Text(word + (index < words.count - 1 ? " " : ""))
+                                    .font(.title2)
+                                    .fontDesign(.rounded)
+                                    .bold()
+                                    .foregroundColor(index <= currentIndexWord - 1 ? .white : .gray.opacity(0.75))
+                                
+                                return partialResult + wordText
+                            }
+                            
+                            // Display the concatenated text
+                            fullText
+                                .padding(.horizontal)
+                            
+                        } else {
+                            
+                            ForEach(textList, id: \.0) { index, line in
+                                Text(line)
+                                    .id(index)
+                                    .font(.title2)
+                                    .fontDesign(.rounded)
+                                    .bold()
+                                    .foregroundStyle(currentIndex == index ? .white : .gray.opacity(0.75))
+                                    .onTapGesture {
+                                        withAnimation(.spring) {
+                                            scrollProxy.scrollTo(index, anchor: .center)
+                                            currentIndex = index
+                                        }
                                     }
-                                }
+                            }
+                            .padding(.horizontal)
+                            
                         }
-                        .padding()
                         
                         Spacer()
                             .frame(height: size.height * 0.9)
@@ -96,22 +129,71 @@ struct ContentView: View {
             }
         }
         .ignoresSafeArea()
-        .overlay(recordingButton, alignment: .bottomLeading)
-        .onTapGesture {
-            showTextEditor.toggle()
-        }
+        .overlay(bottomLeadingButtons, alignment: .bottomLeading)
         .sheet(isPresented: $showTextEditor) { editTextView }
         .onAppear {
-            let speech = SpeechRecognizer()
-            try? speech.startListening { result in
-                guard let speech = result else { return }
-                
+            
+            
+        }
+    }
+    
+    func handleWordListening(_ speech: String) {
+        guard words.count != 0 && currentIndexWord < words.count else { return }
+        if let cleanedSpeech = speech.components(separatedBy: .whitespaces).last {
+            let check = words[currentIndexWord]
+            if cleanedSpeech.lowercased() == check.lowercased() {
+                currentWords.append(cleanedSpeech)
+                currentIndexWord += 1
             }
         }
     }
 }
 
+extension Sequence where Iterator.Element == Unicode.Scalar {
+    var string: String {
+        String(String.UnicodeScalarView(self))
+    }
+}
+
 extension ContentView {
+    var bottomLeadingButtons: some View {
+        VStack {
+            menuButton
+            recordingButton
+        }
+    }
+    
+    var menuButton: some View {
+        Menu {
+            Toggle(isOn: $isReadingFromText) {
+                Label("Read from text", systemImage: "waveform.circle")
+            }
+            .onChange(of: isReadingFromText) { _, _ in
+                if isReadingFromText {
+                    try? speechRecignizer.startListening { result in
+                        guard let speech = result else { return }
+                        handleWordListening(speech)
+                    }
+                } else {
+                    speechRecignizer.stopListening()
+                    currentIndexWord = 0
+                }
+            }
+            
+            Button("Edit text") {
+                showTextEditor.toggle()
+            }
+            
+        } label: {
+            Image(systemName: "gear")
+        }
+        .padding()
+        .frame(width: 60, height: 60)
+        .background(.ultraThinMaterial, in: Circle())
+        .foregroundStyle(.white)
+        .font(.title)
+    }
+    
     var backgroundView: some View {
         ZStack {
             LinearGradient(
@@ -123,6 +205,16 @@ extension ContentView {
             // Semi-transparent overlay with material effect
             Color.black.opacity(0.4)
                 .background(Material.ultraThin)
+            
+            Button("Empty text 🥶") {
+                showTextEditor.toggle()
+            }
+            .font(.title)
+            .bold()
+            .fontDesign(.rounded)
+            .tint(.white)
+            .opacity(text.isEmpty ? 1.0 : 0)
+            
         }
     }
     
@@ -149,6 +241,7 @@ extension ContentView {
             Image(systemName: isRecording ? "stop.fill" : "video.fill")
         }
         .padding()
+        .frame(width: 60, height: 60)
         .background(isRecording ? .red : .blue, in: Circle())
         .foregroundStyle(.white)
         .font(.title)
