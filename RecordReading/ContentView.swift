@@ -23,7 +23,7 @@ struct ContentView: View {
     @State private var currentIndexWord = 0
     @State private var isReadingFromText = false
     
-    let speechRecignizer = SpeechRecognizer()
+    private let speechRecignizer = SpeechRecognizer()
     
     var words: [String] {
         text.components(separatedBy: .whitespacesAndNewlines).map { component in
